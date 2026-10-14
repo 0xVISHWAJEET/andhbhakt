@@ -3,7 +3,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { db, representativesTable, constituenciesTable, partiesTable, responsibilityDefinitionsTable, dimensionScoresTable, overallScoresTable, methodologyVersionsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { DIMENSION_WEIGHTS, DIMENSION_LABELS, SOURCE_TIER_WEIGHTS, CURRENT_METHODOLOGY_VERSION, GRADE_TABLE } from "../scoring/constants";
 import { recomputeRepresentativeScore } from "../scoring/recompute";
 
@@ -46,6 +46,55 @@ router.get("/representatives", async (req: Request, res: Response): Promise<void
   res.json(rows);
 });
 
+// Idea #6 — compare: pass ?ids=1,2,3, get each one's current snapshot side
+// by side in a single response. Registered before /:id so "compare" is
+// never swallowed as an id value.
+router.get("/representatives/compare", async (req: Request, res: Response): Promise<void> => {
+  const idsParam = req.query["ids"];
+  if (typeof idsParam !== "string" || !idsParam) {
+    res.status(400).json({ error: "Provide ?ids=1,2,3 (2-6 representative ids)" });
+    return;
+  }
+  const ids = idsParam
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (ids.length < 2 || ids.length > 6) {
+    res.status(400).json({ error: "Provide between 2 and 6 representative ids to compare" });
+    return;
+  }
+
+  const reps = await db
+    .select({
+      id: representativesTable.id,
+      name: representativesTable.name,
+      position: representativesTable.position,
+      constituencyName: constituenciesTable.name,
+      partyName: partiesTable.name,
+    })
+    .from(representativesTable)
+    .leftJoin(constituenciesTable, eq(constituenciesTable.id, representativesTable.constituencyId))
+    .leftJoin(partiesTable, eq(partiesTable.id, representativesTable.partyId))
+    .where(inArray(representativesTable.id, ids));
+
+  const scores = await db.select().from(dimensionScoresTable).where(inArray(dimensionScoresTable.representativeId, ids));
+  const overalls = await db.select().from(overallScoresTable).where(inArray(overallScoresTable.representativeId, ids));
+
+  const latestOverallByRep = new Map<number, (typeof overalls)[number]>();
+  for (const o of overalls) {
+    const prev = latestOverallByRep.get(o.representativeId);
+    if (!prev || o.computedAt > prev.computedAt) latestOverallByRep.set(o.representativeId, o);
+  }
+
+  res.json(
+    reps.map((r) => ({
+      ...r,
+      overall: latestOverallByRep.get(r.id) ?? null,
+      dimensionScores: scores.filter((s) => s.representativeId === r.id),
+    }))
+  );
+});
+
 router.get("/representatives/:id", async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params["id"]);
   if (!Number.isInteger(id) || id < 1) {
@@ -79,6 +128,22 @@ router.get("/representatives/:id", async (req: Request, res: Response): Promise<
     .limit(1);
 
   res.json({ ...rep, responsibilityCard: responsibility ?? null, dimensionScores, overall: latestOverall ?? null });
+});
+
+// Idea #6 — score history: every past OverallScore row for this
+// representative, oldest to newest, straight off the append-only table.
+router.get("/representatives/:id/score-history", async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params["id"]);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const rows = await db
+    .select()
+    .from(overallScoresTable)
+    .where(eq(overallScoresTable.representativeId, id))
+    .orderBy(overallScoresTable.computedAt);
+  res.json(rows);
 });
 
 // The published, auditable methodology. No secrets: this is exactly the
