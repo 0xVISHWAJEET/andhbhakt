@@ -2,7 +2,7 @@
 // — kept as a separate domain from this repo's existing scheme/state
 // tracking, since a scheme and an elected representative are genuinely
 // different things to score. See docs/jan-score-ideas.md (idea #1).
-import { pgTable, serial, text, integer, timestamp, pgEnum, unique } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, jsonb, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -49,6 +49,23 @@ export const representativesTable = pgTable(
     unique("representatives_name_constituency_unique").on(table.name, table.constituencyId),
   ]
 );
+
+// Static definition of what each position type is actually responsible for
+// — prevents scoring a Sarpanch on national highways, etc.
+// (docs/jan-score-ideas.md idea #4, "Responsibility Card").
+export const responsibilityDefinitionsTable = pgTable("responsibility_definitions", {
+  id: serial("id").primaryKey(),
+  position: positionTypeEnum("position").notNull().unique(),
+  title: text("title").notNull(),
+  items: jsonb("items").$type<string[]>().notNull(),
+  indicators: jsonb("indicators").$type<string[]>().notNull(),
+});
+
+export const insertResponsibilityDefinitionSchema = createInsertSchema(responsibilityDefinitionsTable).omit({
+  id: true,
+});
+export type InsertResponsibilityDefinition = z.infer<typeof insertResponsibilityDefinitionSchema>;
+export type ResponsibilityDefinition = typeof responsibilityDefinitionsTable.$inferSelect;
 
 export const insertPartySchema = createInsertSchema(partiesTable).omit({ id: true });
 export type InsertParty = z.infer<typeof insertPartySchema>;

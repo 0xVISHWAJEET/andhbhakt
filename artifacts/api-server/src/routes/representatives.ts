@@ -2,7 +2,7 @@
 // jan-score (docs/jan-score-ideas.md idea #1).
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { db, representativesTable, constituenciesTable, partiesTable, dimensionScoresTable, overallScoresTable, methodologyVersionsTable } from "@workspace/db";
+import { db, representativesTable, constituenciesTable, partiesTable, responsibilityDefinitionsTable, dimensionScoresTable, overallScoresTable, methodologyVersionsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { DIMENSION_WEIGHTS, DIMENSION_LABELS, SOURCE_TIER_WEIGHTS, CURRENT_METHODOLOGY_VERSION, GRADE_TABLE } from "../scoring/constants";
 import { recomputeRepresentativeScore } from "../scoring/recompute";
@@ -59,6 +59,13 @@ router.get("/representatives/:id", async (req: Request, res: Response): Promise<
     return;
   }
 
+  // Idea #4 (Responsibility Card): the position's actual scope, so nothing
+  // scores this representative on duties outside their office.
+  const [responsibility] = await db
+    .select()
+    .from(responsibilityDefinitionsTable)
+    .where(eq(responsibilityDefinitionsTable.position, rep.position));
+
   const dimensionScores = await db
     .select()
     .from(dimensionScoresTable)
@@ -71,7 +78,7 @@ router.get("/representatives/:id", async (req: Request, res: Response): Promise<
     .orderBy(desc(overallScoresTable.computedAt))
     .limit(1);
 
-  res.json({ ...rep, dimensionScores, overall: latestOverall ?? null });
+  res.json({ ...rep, responsibilityCard: responsibility ?? null, dimensionScores, overall: latestOverall ?? null });
 });
 
 // The published, auditable methodology. No secrets: this is exactly the
