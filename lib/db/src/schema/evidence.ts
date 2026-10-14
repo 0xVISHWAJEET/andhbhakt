@@ -4,6 +4,7 @@ import { pgTable, serial, text, integer, real, timestamp, boolean, pgEnum } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { representativesTable } from "./representatives";
+import { ingestionRunsTable } from "./ingestion";
 
 export const SOURCE_TIERS = [
   "TIER1_PRIMARY_STATUTORY",
@@ -61,6 +62,9 @@ export const evidenceTable = pgTable("evidence", {
   // moderator approves it. Manually-entered evidence defaults to false.
   needsReview: boolean("needs_review").notNull().default(false),
   aiExtractionConfidence: real("ai_extraction_confidence"),
+  // Links an automated finding back to the connector run that produced it
+  // (docs/jan-score-ideas.md idea #9) — null for manually-entered evidence.
+  ingestionRunId: integer("ingestion_run_id").references(() => ingestionRunsTable.id),
 });
 
 export const insertSourceSchema = createInsertSchema(sourcesTable).omit({ id: true });

@@ -15,6 +15,7 @@ import reviewQueueRouter from "./review_queue";
 import officialResponsesRouter from "./official_responses";
 import citizenRatingsRouter from "./citizen_ratings";
 import auditLogRouter from "./audit_log";
+import adminIngestionRouter from "./admin_ingestion";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(reviewQueueRouter);
 router.use(officialResponsesRouter);
 router.use(citizenRatingsRouter);
 router.use(auditLogRouter);
+router.use(adminIngestionRouter);
 
 export default router;

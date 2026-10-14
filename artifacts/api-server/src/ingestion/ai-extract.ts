@@ -47,6 +47,7 @@ export interface ExtractionInput {
   representativeName: string;
   sourceId: number;
   rawText: string;
+  ingestionRunId?: number;
 }
 
 export async function extractClaimsWithAI(input: ExtractionInput): Promise<{ created: number; error?: string }> {
@@ -119,6 +120,7 @@ export async function extractClaimsWithAI(input: ExtractionInput): Promise<{ cre
       claimStatus: claim.claimStatus,
       needsReview: true,
       aiExtractionConfidence: claim.confidence,
+      ingestionRunId: input.ingestionRunId ?? null,
     });
     created += 1;
   }
