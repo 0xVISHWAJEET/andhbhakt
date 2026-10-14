@@ -11,3 +11,4 @@ export * from "./issue_reports";
 export * from "./representatives";
 export * from "./evidence";
 export * from "./scoring";
+export * from "./official_responses";

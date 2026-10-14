@@ -12,6 +12,7 @@ import adminIssuesRouter from "./admin_issues";
 import newsRouter from "./news";
 import representativesRouter from "./representatives";
 import reviewQueueRouter from "./review_queue";
+import officialResponsesRouter from "./official_responses";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(newsRouter);
 // scheme/state tracking.
 router.use(representativesRouter);
 router.use(reviewQueueRouter);
+router.use(officialResponsesRouter);
 
 export default router;
