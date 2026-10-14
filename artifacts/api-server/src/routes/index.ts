@@ -13,6 +13,7 @@ import newsRouter from "./news";
 import representativesRouter from "./representatives";
 import reviewQueueRouter from "./review_queue";
 import officialResponsesRouter from "./official_responses";
+import citizenRatingsRouter from "./citizen_ratings";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(newsRouter);
 router.use(representativesRouter);
 router.use(reviewQueueRouter);
 router.use(officialResponsesRouter);
+router.use(citizenRatingsRouter);
 
 export default router;

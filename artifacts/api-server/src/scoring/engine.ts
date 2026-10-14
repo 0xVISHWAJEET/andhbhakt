@@ -2,11 +2,11 @@
 // access, so the port is a straight type swap (Prisma model types ->
 // Drizzle-inferred types) with the formulas themselves untouched.
 //
-// This PR covers the evidence-only half of the formula. A later PR (idea #5,
-// citizen ratings) extends computeDimensionScore to also blend in a
-// citizen-rating component — jan-score's real formula weights evidence 80%/
-// ratings 20% within a dimension once ratings exist.
-import type { Dimension, Evidence, Source } from "@workspace/db";
+// Evidence carries 80% of a dimension's internal weight, citizen ratings
+// (docs/jan-score-ideas.md idea #5) the other 20% — citizen sentiment
+// already gets its own dedicated 10% dimension at the top level, this is
+// *within*-dimension color from raters.
+import type { Dimension, Evidence, Source, Rating } from "@workspace/db";
 import { CONFIDENCE_SUPPRESSION_THRESHOLD, DECAY_HALF_LIFE_DAYS, DIMENSION_WEIGHTS, SOURCE_TIER_WEIGHTS } from "./constants";
 
 type EvidenceWithSource = Evidence & { source: Source };
@@ -26,13 +26,18 @@ export interface DimensionResult {
   score: number | null; // null => NR
   confidence: number; // 0-1
   evidenceScore: number | null;
+  citizenScore: number | null;
   evidenceCount: number;
 }
 
-/** Computes a single dimension's evidence-weighted score. */
+/**
+ * Computes a single dimension's evidence-weighted score plus the
+ * (separately weighted) citizen-rating component, and blends them.
+ */
 export function computeDimensionScore(
   dimension: Dimension,
   evidence: EvidenceWithSource[],
+  ratings: Rating[],
   now: Date = new Date()
 ): DimensionResult {
   const relevant = evidence.filter((e) => e.dimension === dimension);
@@ -51,25 +56,48 @@ export function computeDimensionScore(
   }
 
   const evidenceScore = weightTotal > 0 ? weightedSum / weightTotal : null;
-  let score = evidenceScore;
+
+  const relevantRatings = ratings.filter((r) => r.dimension === dimension);
+  let citizenScore: number | null = null;
+  if (relevantRatings.length > 0) {
+    let ratingWeightedSum = 0;
+    let ratingWeightTotal = 0;
+    for (const r of relevantRatings) {
+      const starsAsScore = ((r.stars - 1) / 4) * 100; // 1-5 stars -> 0-100
+      ratingWeightedSum += starsAsScore * r.weight;
+      ratingWeightTotal += r.weight;
+    }
+    citizenScore = ratingWeightTotal > 0 ? ratingWeightedSum / ratingWeightTotal : null;
+  }
+
+  let score: number | null;
+  if (evidenceScore !== null && citizenScore !== null) {
+    score = 0.8 * evidenceScore + 0.2 * citizenScore;
+  } else if (evidenceScore !== null) {
+    score = evidenceScore;
+  } else if (citizenScore !== null) {
+    score = citizenScore;
+  } else {
+    score = null;
+  }
 
   // AI Confidence Index: grows with corroborating evidence volume/quality,
   // shrinks with contradiction (wide spread of raw scores across sources).
-  const confidence = computeConfidence(relevant.map((e) => e.rawScore), tierWeightsSeen);
+  const confidence = computeConfidence(relevant.map((e) => e.rawScore), tierWeightsSeen, relevantRatings.length);
 
   if (score !== null && confidence < CONFIDENCE_SUPPRESSION_THRESHOLD) {
     score = null; // suppressed -> NR, never let an automated finding invent a public score
   }
 
-  return { dimension, score, confidence, evidenceScore, evidenceCount: relevant.length };
+  return { dimension, score, confidence, evidenceScore, citizenScore, evidenceCount: relevant.length };
 }
 
-function computeConfidence(rawScores: number[], tierWeights: number[]): number {
-  if (rawScores.length === 0) return 0;
+function computeConfidence(rawScores: number[], tierWeights: number[], ratingCount: number): number {
+  if (rawScores.length === 0 && ratingCount === 0) return 0;
 
   const avgTierWeight = tierWeights.length > 0 ? tierWeights.reduce((a, b) => a + b, 0) / tierWeights.length : 0.3;
 
-  const volumeFactor = Math.min(1, Math.log2(rawScores.length + 1) / Math.log2(11)); // saturates ~10 items
+  const volumeFactor = Math.min(1, Math.log2(rawScores.length + ratingCount + 1) / Math.log2(11)); // saturates ~10 items
 
   let varianceFactor = 1;
   if (rawScores.length > 1) {

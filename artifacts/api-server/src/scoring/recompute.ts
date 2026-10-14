@@ -4,7 +4,7 @@
 // auditable methodology — the audit_log table itself is the subject of a
 // later, dedicated PR, but recompute needs to write to it from day one for
 // the methodology to actually be auditable).
-import { db, evidenceTable, sourcesTable, dimensionScoresTable, overallScoresTable, auditLogTable } from "@workspace/db";
+import { db, evidenceTable, sourcesTable, ratingsTable, dimensionScoresTable, overallScoresTable, auditLogTable } from "@workspace/db";
 import type { Dimension } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { computeDimensionScore, computeOverallIndex } from "./engine";
@@ -23,9 +23,10 @@ export async function recomputeRepresentativeScore(representativeId: number, act
     .where(and(eq(evidenceTable.representativeId, representativeId), eq(evidenceTable.needsReview, false)));
 
   const evidence = evidenceRows.map((r) => ({ ...r.evidence, source: r.source }));
+  const ratings = await db.select().from(ratingsTable).where(eq(ratingsTable.representativeId, representativeId));
 
   const now = new Date();
-  const dimensionResults = ALL_DIMENSIONS.map((d) => computeDimensionScore(d, evidence, now));
+  const dimensionResults = ALL_DIMENSIONS.map((d) => computeDimensionScore(d, evidence, ratings, now));
   const overall = computeOverallIndex(dimensionResults);
   const { grade, flag } = gradeForIndex(overall.index);
   const periodLabel = currentReviewPeriod(now);
@@ -40,6 +41,7 @@ export async function recomputeRepresentativeScore(representativeId: number, act
           score: d.score,
           confidence: d.confidence,
           evidenceCount: d.evidenceCount,
+          citizenScore: d.citizenScore,
           evidenceScore: d.evidenceScore,
           methodologyVersion: CURRENT_METHODOLOGY_VERSION,
         })
@@ -49,6 +51,7 @@ export async function recomputeRepresentativeScore(representativeId: number, act
             score: d.score,
             confidence: d.confidence,
             evidenceCount: d.evidenceCount,
+            citizenScore: d.citizenScore,
             evidenceScore: d.evidenceScore,
             computedAt: now,
           },

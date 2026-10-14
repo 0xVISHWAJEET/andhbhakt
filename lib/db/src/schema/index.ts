@@ -12,3 +12,4 @@ export * from "./representatives";
 export * from "./evidence";
 export * from "./scoring";
 export * from "./official_responses";
+export * from "./citizen_ratings";
