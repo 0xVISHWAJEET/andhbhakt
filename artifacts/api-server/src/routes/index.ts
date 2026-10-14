@@ -11,6 +11,7 @@ import reportIssueRouter from "./report_issue";
 import adminIssuesRouter from "./admin_issues";
 import newsRouter from "./news";
 import representativesRouter from "./representatives";
+import reviewQueueRouter from "./review_queue";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(newsRouter);
 // civic accountability, as its own domain alongside this repo's existing
 // scheme/state tracking.
 router.use(representativesRouter);
+router.use(reviewQueueRouter);
 
 export default router;
